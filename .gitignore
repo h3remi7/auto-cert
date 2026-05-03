@@ -1,0 +1,9 @@
+.env
+certs/
+letsencrypt/
+letsencrypt-lib/
+logs/
+staging-backups/
+
+*.log
+*.pem
