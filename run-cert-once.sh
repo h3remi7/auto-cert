@@ -6,6 +6,7 @@ set -eu
 : "${CLOUDFLARE_PROPAGATION_SECONDS:=60}"
 : "${STAGING:=false}"
 : "${RSA_KEY_SIZE:=4096}"
+: "${RENEW_BEFORE_DAYS:=30}"
 : "${CERT_OUTPUT_DIR:=/certs}"
 : "${LOG_DIR:=/logs}"
 : "${CERTBOT_LOG_DIR:=${LOG_DIR}/letsencrypt}"
@@ -60,14 +61,49 @@ issue_cert() {
 
 renew_certs() {
     echo "Checking certificate renewal status"
+    force_args=""
+    if should_force_renew; then
+        force_args="--force-renewal --cert-name ${cert_name}"
+    fi
+
+    # shellcheck disable=SC2086
     certbot renew \
         --non-interactive \
         --dns-cloudflare \
         --dns-cloudflare-credentials "$CREDENTIALS_FILE" \
         --dns-cloudflare-propagation-seconds "$CLOUDFLARE_PROPAGATION_SECONDS" \
         --logs-dir "$CERTBOT_LOG_DIR" \
+        $force_args \
         $staging_args \
         ${CERTBOT_RENEW_EXTRA_ARGS:-}
+}
+
+should_force_renew() {
+    cert_file="/etc/letsencrypt/live/${cert_name}/fullchain.pem"
+
+    if [ ! -f "$cert_file" ]; then
+        return 1
+    fi
+
+    expires_at="$(openssl x509 -enddate -noout -in "$cert_file" | sed 's/^notAfter=//')"
+    expires_epoch="$(date -u -d "$expires_at" +%s)"
+    now_epoch="$(date -u +%s)"
+    seconds_left=$((expires_epoch - now_epoch))
+    days_left=$((seconds_left / 86400))
+
+    echo "Certificate ${cert_name} expires in ${days_left} day(s); renewal threshold is ${RENEW_BEFORE_DAYS} day(s)"
+
+    if [ "$seconds_left" -le 0 ]; then
+        echo "Certificate ${cert_name} is expired; forcing renewal"
+        return 0
+    fi
+
+    if [ "$days_left" -le "$RENEW_BEFORE_DAYS" ]; then
+        echo "Certificate ${cert_name} is within renewal threshold; forcing renewal"
+        return 0
+    fi
+
+    return 1
 }
 
 sync_cert_files() {
