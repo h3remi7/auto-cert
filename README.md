@@ -6,7 +6,7 @@
 
 - 使用 DNS-01 验证签发 `*.example.com` 通配符证书
 - 支持 Cloudflare API Token 和 Global API Key
-- 自动续期证书
+- 使用 cron 每天检查证书并自动续期
 - 证书输出到 `./certs`
 - 日志输出到 `./logs`
 - Certbot 状态持久化到 `./letsencrypt`
@@ -57,6 +57,30 @@
 
 ```sh
 ./build.sh
+```
+
+## 定时检查
+
+容器内使用 `supercronic` 执行定时任务，默认每天 03:17 检查一次：
+
+```env
+CERT_CRON=17 3 * * *
+```
+
+检查时执行 `certbot renew`。Certbot 会判断证书是否接近过期，通常在剩余 30 天以内才会真正续期。
+
+## 单次执行
+
+只检查/签发一次，执行完容器退出：
+
+```sh
+docker compose run --rm -e RUN_ONCE=true certbot-cloudflare
+```
+
+也可以用命令形式：
+
+```sh
+docker compose run --rm certbot-cloudflare run-once
 ```
 
 证书会额外挂载输出到：
